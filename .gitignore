@@ -1,0 +1,27 @@
+# Swift Package Manager
+.swiftpm
+.build/
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+
+# macOS
+.DS_Store
+._*
+
+# App artifacts
+CuePrompt.app/
+CuePrompt.zip
+*.dmg
+notarization.log
+*.entitlements
+
+# Icon generation
+CuePrompt.iconset/
+
+# Environment
+.env
+.env.local
