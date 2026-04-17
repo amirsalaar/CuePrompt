@@ -85,12 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         NSApplication.shared.activate(ignoringOtherApps: true)
-        // macOS 14+ uses showSettingsWindow:, macOS 13 uses showPreferencesWindow:
-        if NSApp.responds(to: Selector(("showSettingsWindow:"))) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
+        // macOS 14+ direct call — avoids responder chain issues when no window is key
+        NSApp.perform(Selector(("showSettingsWindow:")), with: nil)
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
