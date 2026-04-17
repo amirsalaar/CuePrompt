@@ -4,6 +4,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
+source "$SCRIPT_DIR/signing-common.sh"
 
 NOTARIZE=false
 while [[ $# -gt 0 ]]; do
@@ -75,13 +76,28 @@ EOF
 
 # Code sign
 ENTITLEMENTS="$SCRIPT_DIR/../Entitlements/CuePrompt.entitlements"
-DETECTED_HASH=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk '{print $2}')
-if [ -n "$DETECTED_HASH" ]; then
-  echo "Signing with Developer ID..."
-  codesign --force --deep --sign "$DETECTED_HASH" --options runtime --entitlements "$ENTITLEMENTS" CuePrompt.app
+SIGNING_IDENTITY="$(cueprompt_detect_signing_identity || true)"
+SIGNING_NAME="$(cueprompt_detect_signing_identity_name || true)"
+
+if [ -n "$SIGNING_IDENTITY" ]; then
+  if [ -n "$SIGNING_NAME" ]; then
+    echo "🔍 Using signing identity: $SIGNING_NAME"
+  fi
+
+  echo "🔏 Code signing app with stable identity..."
+  cueprompt_sign_app_bundle \
+    "CuePrompt.app" \
+    "$ENTITLEMENTS" \
+    "$SIGNING_IDENTITY"
   codesign --verify --verbose CuePrompt.app
 else
-  echo "No Developer ID found. App will be unsigned."
+  echo "⚠️  No stable signing identity found. Falling back to ad-hoc signing."
+  echo "⚠️  macOS may re-prompt for Microphone permissions after each rebuild."
+  echo "💡 Run 'make setup-local-signing' once to create a persistent local signing identity for development."
+
+  cueprompt_sign_app_bundle \
+    "CuePrompt.app" \
+    "$ENTITLEMENTS"
 fi
 
 echo "Build complete!"

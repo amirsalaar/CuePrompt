@@ -17,7 +17,6 @@ CuePrompt.app/
 CuePrompt.zip
 *.dmg
 notarization.log
-*.entitlements
 
 # Icon generation
 CuePrompt.iconset/
