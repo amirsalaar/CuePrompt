@@ -1,6 +1,6 @@
+import AVFoundation
 import Foundation
 import Speech
-import AVFoundation
 
 /// Apple SFSpeechRecognizer-based fallback provider.
 ///
@@ -38,8 +38,10 @@ actor AppleSpeechProvider: SpeechProvider {
     nonisolated var isListening: Bool { false }
 
     func startListening() async throws -> AsyncStream<[RecognizedWord]> {
-        debugLog("[AppleSpeech] Requesting authorization...")
-        let authStatus = await requestAuthorization()
+        // Check authorization status without prompting — permissions are
+        // handled centrally by PermissionManager during onboarding or
+        // before presenting.
+        let authStatus = SFSpeechRecognizer.authorizationStatus()
         debugLog("[AppleSpeech] Auth status: \(authStatus.rawValue)")
         guard authStatus == .authorized else {
             throw ProviderError.notAuthorized
@@ -50,7 +52,9 @@ actor AppleSpeechProvider: SpeechProvider {
             debugLog("[AppleSpeech] Recognizer unavailable")
             throw ProviderError.unavailable
         }
-        debugLog("[AppleSpeech] Recognizer available. onDevice=\(recognizer.supportsOnDeviceRecognition)")
+        debugLog(
+            "[AppleSpeech] Recognizer available. onDevice=\(recognizer.supportsOnDeviceRecognition)"
+        )
 
         // Prefer on-device recognition
         if recognizer.supportsOnDeviceRecognition {
@@ -138,7 +142,9 @@ actor AppleSpeechProvider: SpeechProvider {
                     self.lastProcessedSegmentCount = newCount
 
                     if !words.isEmpty {
-                        debugLog("[AppleSpeech] +\(words.count) words: \(words.map(\.text).joined(separator: " "))")
+                        debugLog(
+                            "[AppleSpeech] +\(words.count) words: \(words.map(\.text).joined(separator: " "))"
+                        )
                         self.lastWordTime = Date()
                         Task { await self.yieldWords(words) }
                     }
@@ -149,7 +155,9 @@ actor AppleSpeechProvider: SpeechProvider {
 
             if let error {
                 let nsError = error as NSError
-                debugLog("[AppleSpeech] Error: \(nsError.localizedDescription) (domain=\(nsError.domain) code=\(nsError.code))")
+                debugLog(
+                    "[AppleSpeech] Error: \(nsError.localizedDescription) (domain=\(nsError.domain) code=\(nsError.code))"
+                )
                 if nsError.code == 1110 {
                     // "No speech detected" — normal timeout, rotate
                     Task { await self.rotateSession() }
@@ -157,7 +165,9 @@ actor AppleSpeechProvider: SpeechProvider {
                     // 301 = "request was canceled" (we caused it during rotation)
                     // 216 = "task was canceled" — same idea
                     debugLog("[AppleSpeech] Ignoring cancellation error (rotation in progress)")
-                } else if nsError.localizedDescription.contains("Siri") || nsError.localizedDescription.contains("Dictation") {
+                } else if nsError.localizedDescription.contains("Siri")
+                    || nsError.localizedDescription.contains("Dictation")
+                {
                     debugLog("[AppleSpeech] On-device failed, retrying with server recognition...")
                     Task { await self.retryWithServerRecognition() }
                 } else {
@@ -181,7 +191,7 @@ actor AppleSpeechProvider: SpeechProvider {
         watchdogTimer?.cancel()
         watchdogTimer = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3_000_000_000) // check every 3s
+                try? await Task.sleep(nanoseconds: 3_000_000_000)  // check every 3s
                 guard !Task.isCancelled, let self else { return }
                 await self.watchdogCheck()
             }
@@ -219,7 +229,7 @@ actor AppleSpeechProvider: SpeechProvider {
         stopRecognitionTask()
 
         Task {
-            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms gap
+            try? await Task.sleep(nanoseconds: 300_000_000)  // 300ms gap
             guard self._isListening, !self.hasFatalError else {
                 self.isRotating = false
                 return
@@ -270,15 +280,7 @@ actor AppleSpeechProvider: SpeechProvider {
         recognitionRequest = nil
     }
 
-    // MARK: - Authorization
-
-    private func requestAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
-        await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status)
-            }
-        }
-    }
+    // MARK: - Authorization (read-only)
 
     enum ProviderError: LocalizedError {
         case notAuthorized
