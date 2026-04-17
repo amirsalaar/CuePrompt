@@ -29,9 +29,13 @@ final class AppState {
     let windowManager = WindowManager()
     let bridgeCoordinator = BridgeCoordinator()
     let prompterState = PrompterState()
+    let permissionManager = PermissionManager()
 
     private(set) var speechCoordinator: SpeechCoordinator!
     var settings = AppSettings.load()
+
+    /// Set when presenting is blocked by missing permissions.
+    var showPermissionAlert = false
 
     // MARK: - State
 
@@ -40,9 +44,9 @@ final class AppState {
     var scriptSections: [ScriptSection] = []
 
     // Timers
-    private var tickTimer: Timer?          // 1s: lost tracking check + state update
+    private var tickTimer: Timer?  // 1s: lost tracking check + state update
     private var presentationStartTime: Date?
-    private var pausedAt: Date?            // when pause started (for subtracting paused time)
+    private var pausedAt: Date?  // when pause started (for subtracting paused time)
     private var totalPausedTime: TimeInterval = 0
     private(set) var wasPausedBeforeCollapse: Bool = false
 
@@ -79,7 +83,9 @@ final class AppState {
         currentContent = content
         scriptWords = TextNormalizer.tokenize(content.scriptText)
         scriptSections = content.sections
-        engine.loadScript(content.scriptText, sections: content.sections, slideBoundaries: content.slideBoundaries)
+        engine.loadScript(
+            content.scriptText, sections: content.sections, slideBoundaries: content.slideBoundaries
+        )
     }
 
     func loadFile(at url: URL) throws {
@@ -121,6 +127,13 @@ final class AppState {
 
     func startPresenting() {
         guard currentContent != nil else { return }
+
+        // Gate on permissions — refresh and check before starting
+        permissionManager.refreshStatus()
+        guard permissionManager.allGranted else {
+            showPermissionAlert = true
+            return
+        }
 
         // Minimize the main window so it doesn't compete with the presentation
         NSApplication.shared.mainWindow?.miniaturize(nil)

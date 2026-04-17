@@ -20,7 +20,9 @@ struct HomeView: View {
             if isDragTargeted {
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(Color.accentColor, lineWidth: 2)
-                    .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                    .background(
+                        Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12)
+                    )
                     .padding(4)
                     .allowsHitTesting(false)
             }
@@ -50,6 +52,30 @@ struct HomeView: View {
                 isEditing = false
             }
         }
+        .alert(
+            "Permissions Required",
+            isPresented: $appState.showPermissionAlert
+        ) {
+            Button("Open System Settings") {
+                appState.permissionManager.openSystemSettings()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(permissionAlertMessage)
+        }
+    }
+
+    private var permissionAlertMessage: String {
+        var missing: [String] = []
+        if appState.permissionManager.microphoneStatus != .granted {
+            missing.append("Microphone")
+        }
+        if appState.permissionManager.speechRecognitionStatus != .granted {
+            missing.append("Speech Recognition")
+        }
+        let list = missing.joined(separator: " and ")
+        return
+            "CuePrompt needs \(list) permission to present. Please grant access in System Settings."
     }
 
     private var headerBar: some View {
@@ -88,12 +114,14 @@ struct HomeView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(alignment: .topLeading) {
                         if scriptText.isEmpty {
-                            Text("Type or paste your script here.\nUse ## headings to create section breaks.")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 13)
-                                .padding(.vertical, 16)
-                                .allowsHitTesting(false)
+                            Text(
+                                "Type or paste your script here.\nUse ## headings to create section breaks."
+                            )
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 16)
+                            .allowsHitTesting(false)
                         }
                     }
                     .onChange(of: scriptText) { _, newValue in
@@ -170,7 +198,9 @@ struct HomeView: View {
                     }
                     isEditing.toggle()
                 } label: {
-                    Label(isEditing ? "Done" : "Edit", systemImage: isEditing ? "checkmark" : "pencil")
+                    Label(
+                        isEditing ? "Done" : "Edit", systemImage: isEditing ? "checkmark" : "pencil"
+                    )
                 }
             }
         }

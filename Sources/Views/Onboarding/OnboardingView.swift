@@ -1,7 +1,6 @@
 import SwiftUI
-import AVFoundation
 
-/// Onboarding flow: welcome -> mic permission -> model download.
+/// Onboarding flow: welcome -> mic permission -> speech recognition permission -> model download.
 struct OnboardingView: View {
     @Bindable var appState: AppState
     @Binding var isComplete: Bool
@@ -11,6 +10,7 @@ struct OnboardingView: View {
     enum OnboardingStep {
         case welcome
         case micPermission
+        case speechPermission
         case modelDownload
     }
 
@@ -23,7 +23,12 @@ struct OnboardingView: View {
                 }
 
             case .micPermission:
-                MicPermissionStepView {
+                MicPermissionStepView(permissionManager: appState.permissionManager) {
+                    step = .speechPermission
+                }
+
+            case .speechPermission:
+                SpeechPermissionStepView(permissionManager: appState.permissionManager) {
                     step = .modelDownload
                 }
 
@@ -70,9 +75,8 @@ private struct WelcomeStepView: View {
 // MARK: - Mic Permission
 
 private struct MicPermissionStepView: View {
+    var permissionManager: PermissionManager
     let onContinue: () -> Void
-
-    @State private var permissionGranted = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -85,31 +89,31 @@ private struct MicPermissionStepView: View {
             Text("Microphone Access")
                 .font(.title2.bold())
 
-            Text("CuePrompt listens to your voice to track where you are in the script. Audio is processed on-device — nothing is sent to the cloud.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+            Text(
+                "CuePrompt listens to your voice to track where you are in the script. Audio is processed on-device — nothing is sent to the cloud."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.secondary)
 
             Spacer()
 
-            if permissionGranted {
+            if permissionManager.microphoneStatus == .granted {
                 Label("Permission granted", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
             }
 
             HStack(spacing: 12) {
-                if !permissionGranted {
+                if permissionManager.microphoneStatus != .granted {
                     Button("Grant Access") {
-                        AVCaptureDevice.requestAccess(for: .audio) { granted in
-                            Task { @MainActor in
-                                permissionGranted = granted
-                            }
+                        Task {
+                            await permissionManager.requestMicrophone()
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 }
 
-                if permissionGranted {
+                if permissionManager.microphoneStatus == .granted {
                     Button("Continue", action: onContinue)
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
@@ -122,8 +126,66 @@ private struct MicPermissionStepView: View {
         }
         .padding(32)
         .onAppear {
-            let status = AVCaptureDevice.authorizationStatus(for: .audio)
-            permissionGranted = (status == .authorized)
+            permissionManager.refreshStatus()
+        }
+    }
+}
+
+// MARK: - Speech Recognition Permission
+
+private struct SpeechPermissionStepView: View {
+    var permissionManager: PermissionManager
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "waveform.circle")
+                .font(.system(size: 56))
+                .foregroundStyle(.tint)
+
+            Text("Speech Recognition")
+                .font(.title2.bold())
+
+            Text(
+                "CuePrompt uses speech recognition to match your spoken words to your script. All recognition happens on-device."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.secondary)
+
+            Spacer()
+
+            if permissionManager.speechRecognitionStatus == .granted {
+                Label("Permission granted", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+
+            HStack(spacing: 12) {
+                if permissionManager.speechRecognitionStatus != .granted {
+                    Button("Grant Access") {
+                        Task {
+                            await permissionManager.requestSpeechRecognition()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+
+                if permissionManager.speechRecognitionStatus == .granted {
+                    Button("Continue", action: onContinue)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                } else {
+                    Button("Skip for Now", action: onContinue)
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                }
+            }
+        }
+        .padding(32)
+        .onAppear {
+            permissionManager.refreshStatus()
         }
     }
 }
@@ -145,9 +207,11 @@ private struct ModelDownloadStepView: View {
             Text("Speech Model")
                 .font(.title2.bold())
 
-            Text("CuePrompt uses a local AI model for speech recognition. Download one now, or use Apple's built-in speech recognition.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+            Text(
+                "CuePrompt uses a local AI model for speech recognition. Download one now, or use Apple's built-in speech recognition."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.secondary)
 
             modelStatusView
 

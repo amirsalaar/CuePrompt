@@ -19,6 +19,8 @@ final class SpeechCoordinator {
     private(set) var error: String?
     private(set) var wordCount: Int = 0
     private(set) var lastHeardWords: String = ""
+    /// Brief notification when falling back to alternate provider.
+    private(set) var fallbackMessage: String?
 
     // MARK: - Dependencies
 
@@ -44,6 +46,7 @@ final class SpeechCoordinator {
     func startListening() {
         guard !isListening else { return }
         error = nil
+        fallbackMessage = nil
 
         debugLog("[SpeechCoordinator] startListening — provider: \(currentProviderType.rawValue)")
 
@@ -53,14 +56,25 @@ final class SpeechCoordinator {
             } catch {
                 debugLog("[SpeechCoordinator] \(currentProviderType.rawValue) failed: \(error)")
                 // Fall back to the other provider
-                let fallback: ProviderType = currentProviderType == .appleSpeech ? .whisperKit : .appleSpeech
-                self.error = "\(currentProviderType.rawValue) failed, trying \(fallback.rawValue)..."
+                let fallback: ProviderType =
+                    currentProviderType == .appleSpeech ? .whisperKit : .appleSpeech
+                self.fallbackMessage = "Switching to \(fallback.rawValue)..."
+                self.error =
+                    "\(currentProviderType.rawValue) failed, trying \(fallback.rawValue)..."
                 do {
                     try await startWithProvider(type: fallback)
-                    self.error = "Using \(fallback.rawValue) (\(currentProviderType.rawValue) unavailable)"
+                    self.fallbackMessage = "Using \(fallback.rawValue)"
+                    self.error =
+                        "Using \(fallback.rawValue) (\(currentProviderType.rawValue) unavailable)"
+                    // Auto-clear fallback message after a few seconds
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(5))
+                        self.fallbackMessage = nil
+                    }
                 } catch {
                     debugLog("[SpeechCoordinator] \(fallback.rawValue) also failed: \(error)")
                     self.error = "Speech failed: \(error.localizedDescription)"
+                    self.fallbackMessage = nil
                     self.isListening = false
                 }
             }
@@ -88,7 +102,8 @@ final class SpeechCoordinator {
             self.engine.processWords(words)
         }
 
-        debugLog("[SpeechCoordinator] \(type.rawValue) stream ended (receivedWords=\(receivedAnyWords))")
+        debugLog(
+            "[SpeechCoordinator] \(type.rawValue) stream ended (receivedWords=\(receivedAnyWords))")
         self.isListening = false
 
         // If the stream ended very quickly with no words, this is a fatal provider error
@@ -144,19 +159,24 @@ final class SpeechCoordinator {
         guard !isListening else { return }
         isListening = true
         error = "Simulated speech"
-        debugLog("[SpeechCoordinator] Starting simulated speech: \(words.count) words at \(wordsPerSecond) wps")
+        debugLog(
+            "[SpeechCoordinator] Starting simulated speech: \(words.count) words at \(wordsPerSecond) wps"
+        )
 
         let interval = 1.0 / wordsPerSecond
         simulationTask = Task { @MainActor in
             for (i, word) in words.enumerated() {
                 guard self.isListening else { break }
-                let rw = RecognizedWord(text: word, timestamp: TimeInterval(i) * interval, confidence: 1.0)
+                let rw = RecognizedWord(
+                    text: word, timestamp: TimeInterval(i) * interval, confidence: 1.0)
                 self.wordCount += 1
                 self.lastHeardWords = word
                 self.engine.processWords([rw])
 
                 if i % 20 == 0 {
-                    debugLog("[Sim] word \(i)/\(words.count): \"\(word)\" cursor=\(self.engine.scrollPosition)")
+                    debugLog(
+                        "[Sim] word \(i)/\(words.count): \"\(word)\" cursor=\(self.engine.scrollPosition)"
+                    )
                 }
 
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
