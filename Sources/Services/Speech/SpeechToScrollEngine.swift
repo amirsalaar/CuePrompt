@@ -90,6 +90,7 @@ final class SpeechToScrollEngine {
         totalWords = displayWords.count
         cursorPosition = 0
         scrollPosition = 0
+        currentSlideIndex = 0
         isTracking = true
         isLost = false
         isPaused = false
@@ -145,7 +146,7 @@ final class SpeechToScrollEngine {
         let matches = index.findLandmarks(spokenWords: recentWords, searchRange: searchRange)
 
         if let best = matches.first(where: { $0.isStrong(threshold: 0.80) }) {
-            let newPos = best.scriptWordIndex + best.length - 1
+            let newPos = best.scriptWordIndex + best.length
             debugLog("[Engine] Recovery: jumping to word \(newPos)")
             cursorPosition = newPos
             scrollPosition = Double(cursorPosition)
@@ -159,7 +160,7 @@ final class SpeechToScrollEngine {
                 let fullRange = 0..<index.wordCount
                 let fullMatches = index.findLandmarks(spokenWords: recentWords, searchRange: fullRange)
                 if let best = fullMatches.first(where: { $0.isStrong(threshold: 0.80) }) {
-                    let newPos = best.scriptWordIndex + best.length - 1
+                    let newPos = best.scriptWordIndex + best.length
                     debugLog("[Engine] Recovery (full scan): jumping to word \(newPos)")
                     cursorPosition = newPos
                     scrollPosition = Double(cursorPosition)

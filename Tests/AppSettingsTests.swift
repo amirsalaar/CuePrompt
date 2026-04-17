@@ -5,8 +5,8 @@ final class AppSettingsTests: XCTestCase {
 
     func testDefaultValues() {
         let settings = AppSettings()
-        XCTAssertEqual(settings.fontSize, 28)
-        XCTAssertEqual(settings.fontName, "SF Pro")
+        XCTAssertEqual(settings.fontSize, 38)
+        XCTAssertEqual(settings.fontName, "New York")
         XCTAssertEqual(settings.textOpacity, 0.4)
         XCTAssertEqual(settings.countdownDuration, 3)
         XCTAssertTrue(settings.autoExpandOnStart)
@@ -29,7 +29,9 @@ final class AppSettingsTests: XCTestCase {
     }
 
     func testDecodeMissingKeysUsesDefaults() throws {
-        // Simulate a saved settings file from an older version with fewer keys
+        // Simulate a saved settings file from an older version with fewer keys.
+        // This path exercises decoder fallbacks, which can intentionally differ
+        // from fresh AppSettings() defaults for migration compatibility.
         let json = """
         { "fontSize": 32, "fontName": "Helvetica" }
         """.data(using: .utf8)!
@@ -42,14 +44,19 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(decoded.countdownDuration, 3)
         XCTAssertTrue(decoded.autoExpandOnStart)
         XCTAssertEqual(decoded.preferredProvider, "WhisperKit")
+        XCTAssertEqual(decoded.preferredModel, "openai_whisper-tiny")
     }
 
     func testDecodeEmptyObject() throws {
         let json = "{}".data(using: .utf8)!
         let decoded = try JSONDecoder().decode(AppSettings.self, from: json)
-        // Everything should be defaults
-        XCTAssertEqual(decoded.fontSize, 28)
+        // Empty decode uses decoder fallback defaults, not necessarily the same
+        // values as a fresh AppSettings() initializer.
+        XCTAssertEqual(decoded.fontSize, 38)
+        XCTAssertEqual(decoded.fontName, "New York")
         XCTAssertEqual(decoded.expandedWidth, 800)
+        XCTAssertEqual(decoded.preferredProvider, "WhisperKit")
+        XCTAssertEqual(decoded.preferredModel, "openai_whisper-tiny")
     }
 
     func testDecodeWithExtraKeys() throws {
