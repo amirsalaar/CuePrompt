@@ -40,6 +40,26 @@ mkdir -p CuePrompt.app/Contents/{MacOS,Resources}
 cp .build/apple/Products/Release/CuePrompt CuePrompt.app/Contents/MacOS/
 chmod +x CuePrompt.app/Contents/MacOS/CuePrompt
 
+# Generate app icon from source PNG
+echo "Generating app icon..."
+ICON_SOURCE="Sources/Resources/AppIcon-source.png"
+ICONSET_DIR="AppIcon.iconset"
+if [ -f "$ICON_SOURCE" ]; then
+  mkdir -p "$ICONSET_DIR"
+  for pair in "16 icon_16x16" "32 icon_16x16@2x" "32 icon_32x32" "64 icon_32x32@2x" \
+              "128 icon_128x128" "256 icon_128x128@2x" "256 icon_256x256" "512 icon_256x256@2x" \
+              "512 icon_512x512" "1024 icon_512x512@2x"; do
+    SIZE="${pair%% *}"
+    NAME="${pair#* }"
+    sips -z "$SIZE" "$SIZE" "$ICON_SOURCE" --out "$ICONSET_DIR/${NAME}.png" >/dev/null 2>&1
+  done
+  iconutil -c icns -o CuePrompt.app/Contents/Resources/AppIcon.icns "$ICONSET_DIR"
+  rm -rf "$ICONSET_DIR"
+  echo "  App icon installed."
+else
+  echo "  ⚠️  $ICON_SOURCE not found — skipping icon generation."
+fi
+
 # Info.plist
 cat > CuePrompt.app/Contents/Info.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

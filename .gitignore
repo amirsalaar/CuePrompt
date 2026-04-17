@@ -24,3 +24,6 @@ CuePrompt.iconset/
 # Environment
 .env
 .env.local
+
+# Python cache
+__pycache__/
