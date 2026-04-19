@@ -3,8 +3,10 @@ import WhisperKit
 
 /// Manages WhisperKit model lifecycle: download, load, and availability.
 ///
-/// Uses WhisperKit's standard storage location (matching VoiceFlow's proven approach)
-/// and validates models by checking for required CoreML bundles.
+/// Uses a shared storage root at `~/Documents/Models/WhisperKit/` so that
+/// CuePrompt and other apps (e.g. Whisp/VoiceFlow) share the same multi-GB
+/// models without duplication. Falls back to the legacy app-specific path
+/// for existing installs.
 @Observable
 final class ModelManager {
 
@@ -30,8 +32,15 @@ final class ModelManager {
         "TextDecoder.mlmodelc",
     ]
 
-    /// WhisperKit's standard storage base directory.
+    /// Shared model storage root: ~/Documents/Models/WhisperKit/
+    /// Both CuePrompt and Whisp (VoiceFlow) use this location.
     private var baseDirectory: URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Models/WhisperKit", isDirectory: true)
+    }
+
+    /// Legacy app-specific path for existing installs (read-only fallback).
+    private var legacyBaseDirectory: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("CuePrompt/huggingface/models/argmaxinc/whisperkit-coreml", isDirectory: true)
     }
@@ -42,7 +51,7 @@ final class ModelManager {
     }
 
     /// Check what models are available locally by validating CoreML bundles.
-    /// Also checks VoiceFlow's location to reuse already-downloaded models.
+    /// Checks the shared location first, then legacy fallback paths.
     func scanLocalModels() {
         debugLog("[ModelManager] scanLocalModels — preferred: \(preferredModel)")
 
@@ -55,11 +64,11 @@ final class ModelManager {
 
         // Check the standard location for the preferred model
         if let dir = modelDirectory(for: preferredModel) {
-            debugLog("[ModelManager] Checking CuePrompt location: \(dir.path)")
+            debugLog("[ModelManager] Checking shared location: \(dir.path)")
             if isModelValid(at: dir.path) {
                 modelPath = dir.path
                 state = .downloaded
-                debugLog("[ModelManager] Found valid model at CuePrompt location")
+                debugLog("[ModelManager] Found valid model at shared location")
                 return
             }
         }
@@ -81,8 +90,8 @@ final class ModelManager {
             }
         }
 
-        // Check VoiceFlow's location — reuse already-downloaded models
-        debugLog("[ModelManager] Checking VoiceFlow location...")
+        // Check legacy fallback paths
+        debugLog("[ModelManager] Checking fallback locations...")
         if let found = findDownloadedModel() {
             modelPath = found
             state = .downloaded
@@ -95,7 +104,7 @@ final class ModelManager {
     }
 
     /// Download the preferred model using WhisperKit's built-in mechanism.
-    /// This matches VoiceFlow's approach: let WhisperKit handle the download entirely.
+    /// WhisperKit handles the download, placement, and structure.
     func downloadModel() async {
         state = .downloading(progress: 0)
 
@@ -175,20 +184,19 @@ final class ModelManager {
         return true
     }
 
-    /// Search common WhisperKit download locations for the model.
-    /// Also checks VoiceFlow's location to reuse already-downloaded models.
+    /// Search known WhisperKit download locations for the model.
+    /// Checks the shared root first, then legacy app-specific and generic paths.
     private func findDownloadedModel() -> String? {
         let fm = FileManager.default
-        guard let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            return nil
-        }
+        let documents = fm.urls(for: .documentDirectory, in: .userDomainMask).first
 
-        // Check several possible locations WhisperKit might use
         let candidates = [
+            // 1. Shared root (primary)
             baseDirectory?.appendingPathComponent(preferredModel),
-            appSupport.appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml/\(preferredModel)"),
-            // Also check VoiceFlow's location — reuse already-downloaded models
-            appSupport.appendingPathComponent("VoiceFlow/huggingface/models/argmaxinc/whisperkit-coreml/\(preferredModel)"),
+            // 2. Legacy CuePrompt app-specific path (read-only fallback)
+            legacyBaseDirectory?.appendingPathComponent(preferredModel),
+            // 3. WhisperKit's old default ~/Documents/huggingface/...
+            documents?.appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml/\(preferredModel)"),
         ]
 
         for candidate in candidates {
