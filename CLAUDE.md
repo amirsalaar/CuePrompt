@@ -19,7 +19,7 @@ CuePrompt is a macOS-native smart teleprompter. It uses WhisperKit voice recogni
 ```
 Sources/
   App/            — CuePromptApp, AppDelegate, AppState (root coordinator)
-  Models/         — AppSettings, PrompterState, Presentation, Script, RecognizedWord
+  Models/         — AppSettings, PrompterState, Presentation, Script, RecognizedWord, ContentSource
   Resources/      — Bundled app resources/assets
   Services/
     Bridge/       — Chrome extension WebSocket bridge (BridgeCoordinator, WebSocketServer)
@@ -27,11 +27,13 @@ Sources/
                     SpeechCoordinator, SpeechToScrollEngine, FuzzyMatcher, LandmarkIndex,
                     ModelManager, TextNormalizer
     ContentIngestor, MarkdownParser, WindowManager
-  Utilities/      — Constants, ScreenDetector, CodableRect
+  Utilities/      — Constants, ScreenDetector, CodableRect, DesignTokens
   Views/
     MainWindow/   — HomeView
     Onboarding/   — OnboardingView
-    Prompter/     — PillView, PrompterContentView, PrompterTextView, CountdownView, etc.
+    Prompter/     — PillView, PrompterContentView, PrompterOverlayView, PrompterTextView,
+                    PrompterTextCoordinator, PrompterScrollView, PrompterLayoutManager,
+                    CountdownView, MarkdownRenderer
     Settings/     — SettingsView tabs (Appearance, Behavior, Speech)
 Tests/            — XCTest files mirroring Services (FuzzyMatcher, LandmarkIndex, Engine, etc.)
 scripts/          — build.sh, install.sh, run-tests.sh, create-dmg.sh, gen_icon.py
@@ -46,6 +48,8 @@ scripts/          — build.sh, install.sh, run-tests.sh, create-dmg.sh, gen_ico
 - **ContentIngestor** — normalizes input from text/files/Chrome extension into `EngineContent`
 - **BridgeCoordinator** — WebSocket server receiving Google Slides data from Chrome extension
 - **WindowManager** — manages the floating prompter panel (pill ↔ expanded)
+- **PrompterTextCoordinator** — 60fps display-link scroll coordinator; owns `displayedOffset` (smooth interpolation) and `userScrollOffset` (viewport pan); lives inside `PrompterTextView`
+- **PrompterScrollView** — `NSScrollView` subclass; intercepts `scrollWheel` events and routes them to the coordinator without touching the engine
 - **PrompterState** — modes: `idle`, `countdown`, `expanded`, `collapsed`, `paused`, `finished`
 
 ## Code Style
@@ -70,6 +74,7 @@ scripts/          — build.sh, install.sh, run-tests.sh, create-dmg.sh, gen_ico
   setenv("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1", 1)
   ```
 - **Landmark-based tracking** instead of word-by-word matching — see plan for algorithm details
+- **Scroll system is two-layer**: `SpeechToScrollEngine.scrollPosition` (Q word / highlight) and `PrompterTextCoordinator.userScrollOffset` (viewport pan) are independent. Trackpad scroll shifts the viewport only — the Q word never moves. `userScrollOffset` decays at ×0.97/frame so speech re-centers automatically.
 - **Debug log** written to `/tmp/cueprompt-debug.log` via `debugLog()` in AppState.swift
 
 ## Building
@@ -81,6 +86,7 @@ make test            # Run tests (swift test --parallel)
 make install         # Build + install to /Applications
 make clean           # Remove .build/, app bundle, DMG
 make dmg             # Create distributable DMG
+make setup-local-signing  # Create persistent local signing identity
 make help            # List common targets
 ```
 
