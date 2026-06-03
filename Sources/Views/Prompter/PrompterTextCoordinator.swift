@@ -22,8 +22,12 @@ final class PrompterTextCoordinator {
     /// Total content height.
     var contentHeight: CGFloat = 0
 
-    /// Current displayed scroll offset (for smooth interpolation).
+    /// Current displayed scroll offset (for smooth interpolation toward speech target).
     private var displayedOffset: CGFloat = 0
+
+    /// Additional pixel offset applied by user scroll, on top of speech-driven position.
+    /// Decays back to zero so speech eventually re-centers the Q word.
+    private var userScrollOffset: CGFloat = 0
 
     /// Currently highlighted word index.
     private var highlightedWordIndex: Int = -1
@@ -58,6 +62,26 @@ final class PrompterTextCoordinator {
 
     deinit {
         stopDisplayLink()
+    }
+
+    // MARK: - User Scroll
+
+    /// Called by PrompterScrollView when the user scrolls with trackpad/mouse.
+    /// Shifts the viewport without touching the engine or Q word.
+    func handleScrollWheel(deltaY: CGFloat) {
+        guard let scrollView else { return }
+        let docHeight = scrollView.documentView?.frame.height ?? 0
+        let vpHeight = scrollView.contentView.bounds.height
+        let maxScroll = max(0, docHeight - vpHeight)
+
+        userScrollOffset = (userScrollOffset - deltaY).clamped(to: -maxScroll...maxScroll)
+
+        // Apply immediately so the scroll feels instant
+        let base = displayedOffset - userScrollOffset  // speech-only position
+        let combined = (base + userScrollOffset).clamped(to: 0...maxScroll)
+        displayedOffset = combined
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: displayedOffset))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     // MARK: - Word Highlight
@@ -175,12 +199,15 @@ final class PrompterTextCoordinator {
 
         // Target: put this word slightly above center so upcoming text is visible below
         let vpHeight = scrollView.contentView.bounds.height
-        let targetOffset = wordY - vpHeight * 0.35 + lineRect.height / 2.0
+        let speechTarget = wordY - vpHeight * 0.35 + lineRect.height / 2.0
 
         // Clamp to valid scroll range
         let docHeight = scrollView.documentView?.frame.height ?? 0
         let maxScroll = max(0, docHeight - vpHeight)
-        let clampedTarget = max(0, min(targetOffset, maxScroll))
+        let clampedTarget = max(0, min(speechTarget + userScrollOffset, maxScroll))
+
+        // Decay userScrollOffset toward zero so speech gradually re-centers
+        userScrollOffset *= 0.97
 
         // Smooth interpolation
         let alpha: CGFloat = 0.10
@@ -191,5 +218,23 @@ final class PrompterTextCoordinator {
 
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: displayedOffset))
         scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+}
+
+/// NSScrollView subclass that forwards scroll wheel events to the coordinator.
+final class PrompterScrollView: NSScrollView {
+    weak var coordinator: PrompterTextCoordinator?
+
+    override func scrollWheel(with event: NSEvent) {
+        let delta = event.scrollingDeltaY
+        if abs(delta) > 0 {
+            coordinator?.handleScrollWheel(deltaY: delta)
+        }
+    }
+}
+
+private extension CGFloat {
+    func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
+        Swift.max(range.lowerBound, Swift.min(range.upperBound, self))
     }
 }

@@ -15,7 +15,8 @@ struct PrompterTextView: NSViewRepresentable {
     typealias Coordinator = PrompterTextCoordinator
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = PrompterScrollView()
+        scrollView.coordinator = context.coordinator
         scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = false
