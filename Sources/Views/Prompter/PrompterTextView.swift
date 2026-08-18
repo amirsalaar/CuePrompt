@@ -58,8 +58,7 @@ struct PrompterTextView: NSViewRepresentable {
         let currentWidth = scrollView.contentView.bounds.width
         let widthChanged = currentWidth > 0 && abs(currentWidth - coordinator.lastLayoutWidth) > 10
         if coordinator.lastContentKey != contentKey || coordinator.lastFontSize != settings.fontSize
-            || widthChanged
-        {
+            || widthChanged {
             coordinator.lastContentKey = contentKey
             coordinator.lastFontSize = settings.fontSize
             coordinator.lastLayoutWidth = currentWidth
@@ -90,8 +89,7 @@ struct PrompterTextView: NSViewRepresentable {
             let size = settings.fontSize * 1.3
             if settings.fontName == "New York",
                 let desc = NSFontDescriptor.preferredFontDescriptor(forTextStyle: .body)
-                    .withDesign(.serif)?.withSymbolicTraits(.bold)
-            {
+                    .withDesign(.serif)?.withSymbolicTraits(.bold) {
                 return NSFont(descriptor: desc, size: size)
                     ?? NSFont.systemFont(ofSize: size, weight: .bold)
             }
@@ -164,14 +162,12 @@ struct PrompterTextView: NSViewRepresentable {
 
             // Track word positions in the rendered (clean) text
             let renderedString = renderedBody.string
-            let cleanWords = renderedString.components(separatedBy: .whitespacesAndNewlines).filter
-            { !$0.isEmpty }
+            let cleanWords = renderedString.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
             let bodyStart = fullAttributed.length
             var bodySearchStart = renderedString.startIndex
             for word in cleanWords {
                 if let range = renderedString.range(
-                    of: word, range: bodySearchStart..<renderedString.endIndex)
-                {
+                    of: word, range: bodySearchStart..<renderedString.endIndex) {
                     let charOffset = renderedString.distance(
                         from: renderedString.startIndex, to: range.lowerBound)
                     wordPositions.append(bodyStart + charOffset)

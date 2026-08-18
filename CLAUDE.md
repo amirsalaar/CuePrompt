@@ -12,32 +12,17 @@ CuePrompt is a macOS-native smart teleprompter. It uses WhisperKit voice recogni
 - **Swift Concurrency** (async/await, AsyncStream, actors) for all async work
 - **No SwiftData** — UserDefaults for settings, FileManager for presentation cache
 - **VERSION** file in repo root drives `CFBundleShortVersionString` in build script
+- **Bundle `Info.plist` is generated, not read** — heredocs in `scripts/build.sh` AND `.github/workflows/release.yml`. Edit both. The root `Info.plist` is vestigial; nothing reads it.
 - Requires **microphone** and **speech recognition** permissions
 
-### Directory Structure
+### Layout
 
-```
-Sources/
-  App/            — CuePromptApp, AppDelegate, AppState (root coordinator)
-  Models/         — AppSettings, PrompterState, Presentation, Script, RecognizedWord, ContentSource
-  Resources/      — Bundled app resources/assets
-  Services/
-    Bridge/       — Chrome extension WebSocket bridge (BridgeCoordinator, WebSocketServer)
-    Speech/       — SpeechProvider protocol, WhisperKitProvider, AppleSpeechProvider,
-                    SpeechCoordinator, SpeechToScrollEngine, FuzzyMatcher, LandmarkIndex,
-                    ModelManager, TextNormalizer
-    ContentIngestor, MarkdownParser, WindowManager
-  Utilities/      — Constants, ScreenDetector, CodableRect, DesignTokens
-  Views/
-    MainWindow/   — HomeView
-    Onboarding/   — OnboardingView
-    Prompter/     — PillView, PrompterContentView, PrompterOverlayView, PrompterTextView,
-                    PrompterTextCoordinator, PrompterScrollView, PrompterLayoutManager,
-                    CountdownView, MarkdownRenderer
-    Settings/     — SettingsView tabs (Appearance, Behavior, Speech)
-Tests/            — XCTest files mirroring Services (FuzzyMatcher, LandmarkIndex, Engine, etc.)
-scripts/          — build.sh, install.sh, run-tests.sh, create-dmg.sh, gen_icon.py
-```
+- `Sources/App` — `AppState` is the root coordinator; owns every service
+- `Sources/Services/Speech` — providers + matching engine (the heart of the app)
+- `Sources/Services/Bridge` — WebSocket server for the Chrome extension
+- `Sources/Views/{MainWindow,Onboarding,Prompter,Settings}` — SwiftUI with AppKit interop
+- `Extension/` — Chrome MV3 extension (plain JS) that scrapes Google Slides speaker notes
+- `Entitlements/`, `scripts/` — signing + build tooling
 
 ### Key Types
 
@@ -73,8 +58,9 @@ scripts/          — build.sh, install.sh, run-tests.sh, create-dmg.sh, gen_ico
   setenv("TRANSFORMERS_OFFLINE", "1", 1)
   setenv("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1", 1)
   ```
-- **Landmark-based tracking** instead of word-by-word matching — see plan for algorithm details
+- **Landmark-based tracking** instead of word-by-word matching — algorithm lives in `LandmarkIndex.swift` + `SpeechToScrollEngine.swift`; read their tests first. `CueFlow-Engineering-Spec.md` predates this design and never mentions landmarks.
 - **Scroll system is two-layer**: `SpeechToScrollEngine.scrollPosition` (Q word / highlight) and `PrompterTextCoordinator.userScrollOffset` (viewport pan) are independent. Trackpad scroll shifts the viewport only — the Q word never moves. `userScrollOffset` decays at ×0.97/frame so speech re-centers automatically.
+- **Engine and text view must tokenize identically** — `SpeechToScrollEngine.loadScript` splits raw markdown on whitespace then normalizes via `TextNormalizer`; `PrompterTextView.rebuildContent` splits the *rendered* string (markers stripped) on whitespace. The word **counts** must stay equal or the highlight desyncs from the scroll position. Any `MarkdownRenderer` change that alters whitespace breaks this silently.
 - **Debug log** written to `/tmp/cueprompt-debug.log` via `debugLog()` in AppState.swift
 
 ## Building
@@ -90,6 +76,15 @@ make setup-local-signing  # Create persistent local signing identity
 make help            # List common targets
 ```
 
+- Run `make setup-local-signing` **once per machine**: otherwise `build.sh` ad-hoc signs and macOS resets Microphone permission on every rebuild.
+- `make build` reveals the bundle in Finder on completion and does **not** run tests.
+
+## CI & Releasing
+
+- `ci.yml` — PRs to `main` run `swift build -c release` and `swift test --parallel`
+- `release.yml` — **any push to `main` touching a non-`.md` file cuts a public release**: tests, universal build, sign + notarize, tag `v$VERSION`, upload .zip + .dmg. If `v$VERSION` already exists it silently auto-bumps the patch.
+- So: branch + PR for all code work. Bump `VERSION` only in the change that should ship.
+
 ## Testing / Debugging
 
 - `--simulate` flag: launches with test text and simulated speech at 3 wps (no mic needed)
@@ -97,6 +92,8 @@ make help            # List common targets
   .build/apple/Products/Release/CuePrompt --simulate
   ```
 - Debug log: `tail -f /tmp/cueprompt-debug.log`
+- Single test: `swift test --filter FuzzyMatcherTests` (or `--filter FuzzyMatcherTests/testName`)
+- Non-Swift test data goes in `Tests/Fixtures/` only — it's the sole path excluded in `Package.swift`
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.

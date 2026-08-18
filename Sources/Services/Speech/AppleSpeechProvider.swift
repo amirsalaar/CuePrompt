@@ -166,8 +166,7 @@ actor AppleSpeechProvider: SpeechProvider {
                     // 216 = "task was canceled" — same idea
                     debugLog("[AppleSpeech] Ignoring cancellation error (rotation in progress)")
                 } else if nsError.localizedDescription.contains("Siri")
-                    || nsError.localizedDescription.contains("Dictation")
-                {
+                    || nsError.localizedDescription.contains("Dictation") {
                     debugLog("[AppleSpeech] On-device failed, retrying with server recognition...")
                     Task { await self.retryWithServerRecognition() }
                 } else {

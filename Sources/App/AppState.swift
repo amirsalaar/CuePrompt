@@ -133,8 +133,7 @@ final class AppState {
 
         // If not yet asked, request permissions first
         if permissionManager.microphoneStatus == .notDetermined
-            || permissionManager.speechRecognitionStatus == .notDetermined
-        {
+            || permissionManager.speechRecognitionStatus == .notDetermined {
             Task { @MainActor in
                 let granted = await permissionManager.requestAll()
                 if granted {

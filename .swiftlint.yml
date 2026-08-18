@@ -1,0 +1,61 @@
+# SwiftLint config for CuePrompt.
+# Enforces the style rules asserted in CLAUDE.md. Thresholds are set so the
+# current baseline passes at `error` severity — tighten them as debt is paid down.
+
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - Extension
+
+# Rules CLAUDE.md asks for that aren't on by default.
+opt_in_rules:
+  - force_unwrapping          # "Avoid force unwrapping (!); prefer guard let"
+  - empty_count
+  - first_where
+  - last_where
+  - contains_over_first_not_nil
+  - redundant_nil_coalescing
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  - closure_spacing
+  - explicit_init
+
+disabled_rules:
+  - trailing_comma            # trailing commas in multiline literals are the house style
+  - todo                      # tracked in tasks/todo.md, not by the linter
+
+# "Functions <= 40 lines, single-purpose" — warn at the CLAUDE.md limit, error
+# above the current worst offender (PrompterTextView.makeNSView, 128 lines).
+function_body_length:
+  warning: 40
+  error: 150
+
+cyclomatic_complexity:
+  warning: 10
+  error: 20
+
+line_length:
+  warning: 140
+  error: 200
+  ignores_urls: true
+  ignores_comments: true
+
+type_body_length:
+  warning: 400
+  error: 600
+
+file_length:
+  warning: 500
+  error: 800
+
+# Short names are idiomatic for loop indices and geometry math (i, x, y, dx).
+identifier_name:
+  min_length: 1
+  max_length:
+    warning: 45
+    error: 60
+
+reporter: xcode

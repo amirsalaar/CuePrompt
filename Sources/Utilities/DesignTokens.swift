@@ -92,8 +92,7 @@ enum CueFont {
     if name == "New York" {
       // Apple's New York serif via system font descriptor
       if let descriptor = NSFontDescriptor.preferredFontDescriptor(forTextStyle: .body)
-        .withDesign(.serif)
-      {
+        .withDesign(.serif) {
         return NSFont(descriptor: descriptor, size: size)
           ?? NSFont.systemFont(ofSize: size)
       }

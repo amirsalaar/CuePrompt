@@ -23,7 +23,7 @@ struct AppSettings: Codable, Equatable {
     var expandedHeight: Double = 400
     var showThumbnails: Bool = true
     var thumbnailPosition: ThumbnailPosition = .right
-    var targetDisplayID: UInt32? = nil  // nil = auto (camera screen)
+    var targetDisplayID: UInt32?  // nil = auto (camera screen)
 
     enum ThumbnailPosition: String, Codable, CaseIterable {
         case left, right

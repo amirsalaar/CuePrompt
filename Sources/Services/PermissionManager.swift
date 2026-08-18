@@ -84,8 +84,7 @@ final class PermissionManager {
     // On macOS 14+ (Sonoma), the old x-apple.systempreferences URLs no longer work.
     // Use the documented Privacy & Security deep link instead.
     if let url = URL(
-      string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension")
-    {
+      string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension") {
       NSWorkspace.shared.open(url)
     }
   }

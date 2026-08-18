@@ -64,7 +64,7 @@ actor WhisperKitProvider: SpeechProvider {
             noSpeechThreshold: 0.6
         )
 
-        let stateCallback: AudioStreamTranscriberCallback = { [weak self] oldState, newState in
+        let stateCallback: AudioStreamTranscriberCallback = { [weak self] _, newState in
             guard let self else { return }
 
             // --- 1. Handle newly confirmed segments (authoritative) ---

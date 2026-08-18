@@ -1,4 +1,4 @@
-.PHONY: help build build-notarize install test clean dmg setup-local-signing
+.PHONY: help build build-notarize install test lint lint-fix clean dmg setup-local-signing
 
 SCRIPTS := scripts
 
@@ -8,6 +8,8 @@ help:
 	@echo "Available targets:"
 	@echo "  build               - Build the release app bundle (universal binary)"
 	@echo "  test                - Run tests"
+	@echo "  lint                - Run SwiftLint"
+	@echo "  lint-fix            - Autocorrect the mechanical SwiftLint violations"
 	@echo "  install             - Build and install to /Applications/"
 	@echo "  clean               - Clean build artifacts"
 	@echo "  dmg                 - Create a DMG for distribution"
@@ -24,6 +26,12 @@ install:
 
 test:
 	$(SCRIPTS)/run-tests.sh
+
+lint:
+	swiftlint lint
+
+lint-fix:
+	swiftlint --fix
 
 clean:
 	rm -rf .build

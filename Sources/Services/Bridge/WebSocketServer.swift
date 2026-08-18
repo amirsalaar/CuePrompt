@@ -70,7 +70,7 @@ final class WebSocketServer {
     private func receiveMessage() {
         guard let connection else { return }
 
-        connection.receiveMessage { [weak self] content, context, _, error in
+        connection.receiveMessage { [weak self] content, _, _, error in
             if let error {
                 print("[WebSocket] Receive error: \(error)")
                 return

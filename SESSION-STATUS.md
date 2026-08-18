@@ -1,5 +1,14 @@
 # CuePrompt Session Status — April 15, 2026
 
+> **Historical snapshot — not the current state of the repo.**
+>
+> Re-verified against the code on 2026-08-17:
+> - **BUG 1 (stale phrase buffer) is fixed.** `advanceTo()` now clears `spokenBuffer` down to its last word — a refinement of the fix proposed below, not the literal `spokenBuffer = []`.
+> - **BUGs 2 and 3 appear unaddressed.** `lineFragmentPadding = 0` is still set with no `invalidateDisplay` call, and `showPill()` still sets the panel frame before layout.
+> - The **file inventory**, **"What's Working"**, and **"Session Changes Made"** sections are history and have drifted (the inventory lists 41 Swift files; `Sources/` now has 43, including `PermissionManager`, which is absent below).
+>
+> For current architecture and conventions read [`CLAUDE.md`](CLAUDE.md); for build and run instructions read [`README.md`](README.md). Trust the code over this file.
+
 ## What CuePrompt Is
 
 A macOS-native teleprompter app. Uses voice recognition (Apple Speech or WhisperKit) to scroll text in sync with the speaker's voice. Presents as a Dynamic Island-style pill that camouflages with the MacBook camera notch, then expands into a full-screen prompter overlay. Content comes from a Chrome extension (Google Slides speaker notes), manual text entry, or local markdown/text files.
@@ -102,7 +111,21 @@ PrompterContentView (@Bindable appState)
 
 ## What's Broken / Needs Fixing
 
-### BUG 1: Engine gets stuck / stalls on common words (CRITICAL)
+### BUG 1: Engine gets stuck / stalls on common words (CRITICAL) — ✅ FIXED
+
+**Status (2026-08-17): fixed in `SpeechToScrollEngine.advanceTo()`**, which now retains only the
+most recent spoken word instead of the whole stale window:
+
+```swift
+if let last = spokenBuffer.last {
+    spokenBuffer = [last]      // keep the newest word so phrase matching can rebuild
+} else {
+    spokenBuffer = []
+}
+```
+
+The original analysis below is kept for the reasoning; the prescribed one-line fix is superseded.
+
 
 **Symptom**: Tracking advances for a while then freezes. In the latest test, it got stuck at cursor position 12 after matching "buddy victor solution" at position 9. The user kept reading ("per", "of", "pros"...) but no further matches fired.
 
@@ -196,17 +219,16 @@ Debug output goes to `/tmp/cueprompt-debug.log` and `os_log`. Key prefixes:
 ## Build & Run
 
 ```bash
-cd /Users/jacobsurber/Personal/CuePrompt
-swift build                                              # Debug build
-.build/arm64-apple-macosx/debug/CuePrompt               # Run directly
+swift build                  # Debug build
+.build/debug/CuePrompt       # Run directly
 # OR
-make build   # Release universal
+make build   # Release universal (binary at .build/apple/Products/Release/CuePrompt)
 make install # Install to /Applications
 ```
 
 ## What to Do Next (Priority Order)
 
-1. **Fix the stale buffer bug** — Add `spokenBuffer = []` in `advanceTo()`. This is the primary tracking regression. One-line fix.
+1. ~~**Fix the stale buffer bug**~~ — done, see BUG 1 above.
 2. **Fix highlight artifacts** — Investigate adding `invalidateDisplay` call when removing old highlight, or revert `lineFragmentPadding` to default 5.0
 3. **Remove verbose debug logging** — The `[Engine] word:` log in `processOneWord` is useful for debugging but very noisy. Remove after tracking is confirmed working.
 4. **Polish**: Animation jitter on expand/collapse, first-launch pill positioning

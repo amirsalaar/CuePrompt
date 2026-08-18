@@ -1,0 +1,8 @@
+# Test-target overrides. Force-unwrapping decoded fixtures is idiomatic in XCTest —
+# a crash in a test is a failing test, not a shipped bug.
+parent_config: ../.swiftlint.yml
+
+disabled_rules:
+  - trailing_comma
+  - todo
+  - force_unwrapping

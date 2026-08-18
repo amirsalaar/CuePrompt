@@ -57,8 +57,7 @@ enum MarkdownRenderer {
                     result.append(NSAttributedString(string: "*", attributes: baseAttrs))
                     remaining = afterMarker
                 }
-            }
-            else {
+            } else {
                 result.append(NSAttributedString(string: String(remaining), attributes: baseAttrs))
                 break
             }
