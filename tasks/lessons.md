@@ -1,5 +1,35 @@
 # Lessons
 
+## Ranges built from two tokenizations trap at runtime
+
+`cursorPosition..<index.wordCount` is a crash, not a mismatch, when the bounds come from
+different word arrays — Swift traps with "Range requires lowerBound <= upperBound". It stayed
+hidden because it only inverts once the cursor passes the *shorter* array's length, i.e. at the
+end of a long script. Symptoms that look like "random crash after a while" are worth checking
+for range construction on a hot timer path. Keep one index space (`displayWords`) and clamp at
+the boundary as well as fixing the source.
+
+## Timers whose only invalidation is `deinit` never stop
+
+`PrompterTextCoordinator` scheduled a 60fps Timer in `updateNSView` and invalidated it only in
+`deinit`, so it kept running while paused, collapsed, or hidden. For `NSViewRepresentable`, tear
+down in `dismantleNSView` — it runs when the view leaves the hierarchy, rather than waiting for
+SwiftUI to release the coordinator.
+
+## Don't resolve state inside a detached Task you're tearing down
+
+`Task { await activeProvider?.stopListening(); activeProvider = nil }` reads the property when
+the Task *runs*, so a stop-then-start sequence stops the new object. Capture the reference
+synchronously, then await the captured value.
+
+## No crash report means look for a hang
+
+`~/Library/Logs/DiagnosticReports` had no `.ips` for the app at all, which pointed away from a
+signal crash toward a main-thread stall — and the app has two always-on timers plus a hot mic to
+account for. (The real crash turned out to be a Swift trap, which also may not leave a report.)
+Also note `/tmp/cueprompt-debug.log` gets written by the *test suite*, so a stale log there is not
+evidence about the running app.
+
 ## Never push code straight to `main`
 
 `.github/workflows/release.yml` fires on every push to `main` that touches a non-`.md` file: it
