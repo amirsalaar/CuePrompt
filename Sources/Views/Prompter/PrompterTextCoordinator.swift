@@ -39,6 +39,9 @@ final class PrompterTextCoordinator {
     /// Timer for smooth interpolation (~60fps).
     private var displayLink: Timer?
 
+    /// Whether the interpolation timer is currently scheduled.
+    var isDisplayLinkRunning: Bool { displayLink != nil }
+
     func startDisplayLink() {
         guard displayLink == nil else { return }
         displayLink = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) {
