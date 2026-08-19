@@ -29,7 +29,8 @@ final class SpeechCoordinator {
 
     // MARK: - Private
 
-    private var activeProvider: (any SpeechProvider)?
+    /// Internal rather than private so tests can install a stub provider.
+    var activeProvider: (any SpeechProvider)?
     private var listeningTask: Task<Void, Never>?
     private var whisperKitProvider: WhisperKitProvider?
     private var appleSpeechProvider: AppleSpeechProvider?
@@ -131,9 +132,15 @@ final class SpeechCoordinator {
         listeningTask?.cancel()
         listeningTask = nil
 
+        // Detach the provider synchronously, then shut the captured instance down. Reading
+        // `activeProvider` inside the Task would resolve it *later* — so a stop immediately
+        // followed by a start (switchProvider does exactly this) tore down the new
+        // provider instead of the old one, leaving the app listening to nothing.
+        let departing = activeProvider
+        activeProvider = nil
+
         Task {
-            await activeProvider?.stopListening()
-            activeProvider = nil
+            await departing?.stopListening()
         }
     }
 
