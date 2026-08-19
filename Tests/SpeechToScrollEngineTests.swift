@@ -156,4 +156,97 @@ final class SpeechToScrollEngineTests: XCTestCase {
         XCTAssertEqual(engine.totalWords, 5)
         XCTAssertEqual(engine.currentSlideIndex, 0)
     }
+
+    // MARK: - Recovery Index Space
+    //
+    // The recovery index MUST be built with the same tokenization as `displayWords`,
+    // because recovery writes its result straight into `cursorPosition`/`scrollPosition`.
+    // `TextNormalizer.normalizeText` drops filler words and expands numbers, so a script
+    // containing either produces a *shorter or longer* word array than the display split.
+
+    /// A script whose filler words shrink the normalized array must still expose a
+    /// recovery index in display-word space.
+    func testRecoveryIndexWordCountMatchesDisplayWords() {
+        let engine = makeEngine()
+        load(engine, text: "um uh alpha bravo charlie delta echo foxtrot")
+
+        XCTAssertEqual(engine.totalWords, 8)
+        XCTAssertEqual(
+            engine.recoveryIndexWordCount, engine.totalWords,
+            "recovery index must be indexed like displayWords or positions/ranges desync")
+    }
+
+    /// Number expansion grows the normalized array; the index must not follow it.
+    func testRecoveryIndexWordCountUnaffectedByNumberExpansion() {
+        let engine = makeEngine()
+        load(engine, text: "we grew 23 percent last quarter")
+
+        XCTAssertEqual(engine.totalWords, 6)
+        XCTAssertEqual(engine.recoveryIndexWordCount, engine.totalWords)
+    }
+
+    /// Regression: finishing a full speech leaves the cursor near `totalWords`. If the
+    /// recovery index is shorter than the script, `cursorPosition..<wordCount` inverts and
+    /// traps with "Range requires lowerBound <= upperBound".
+    func testRecoveryNearEndOfScriptWithFillerWordsDoesNotTrap() {
+        let engine = makeEngine()
+        load(engine, text: "um uh alpha bravo charlie delta echo foxtrot")
+        engine.lostTrackingTimeout = -1
+
+        engine.nudge(by: 7)  // speaker reached the end of the script
+        engine.checkLostTracking()
+        XCTAssertTrue(engine.isLost)
+
+        engine.attemptRecovery(recentWords: ["alpha", "bravo", "charlie"])
+
+        XCTAssertLessThanOrEqual(engine.scrollPosition, Double(engine.totalWords))
+        XCTAssertGreaterThanOrEqual(engine.scrollPosition, 0)
+    }
+
+    /// Recovery must land on the display word that follows the spoken phrase, not on the
+    /// same ordinal in the filler-stripped array.
+    func testRecoveryJumpsToDisplayWordPosition() {
+        let engine = makeEngine()
+        // display: 0=um 1=uh 2=alpha 3=bravo 4=charlie 5=delta 6=echo 7=foxtrot
+        // filler-stripped: 0=alpha 1=bravo 2=charlie 3=delta 4=echo 5=foxtrot
+        load(engine, text: "um uh alpha bravo charlie delta echo foxtrot")
+        engine.lostTrackingTimeout = -1
+        engine.checkLostTracking()
+
+        engine.attemptRecovery(recentWords: ["alpha", "bravo", "charlie"])
+
+        // "charlie" is display index 4, so the cursor belongs at 5 ("delta") — not 3.
+        XCTAssertEqual(engine.scrollPosition, 5)
+        XCTAssertFalse(engine.isLost)
+    }
+
+    /// A paused engine must not consume recovery: the 1s tick timer calls
+    /// `attemptRecovery()` whenever `isLost` is set, including while paused.
+    func testRecoveryIsIgnoredWhilePaused() {
+        let engine = makeEngine()
+        load(engine, text: "alpha bravo charlie delta echo foxtrot golf hotel")
+        engine.lostTrackingTimeout = -1
+        engine.checkLostTracking()
+        XCTAssertTrue(engine.isLost)
+
+        engine.pause()
+        engine.attemptRecovery(recentWords: ["delta", "echo", "foxtrot"])
+
+        XCTAssertEqual(engine.scrollPosition, 0, "paused engine must not jump the cursor")
+        XCTAssertTrue(engine.isLost, "lost state should persist until resume")
+    }
+
+    /// Resuming must clear the stale silence so recovery doesn't fire immediately.
+    func testResumeClearsLostTracking() {
+        let engine = makeEngine()
+        load(engine, text: "alpha bravo charlie delta echo foxtrot")
+        engine.lostTrackingTimeout = -1
+        engine.checkLostTracking()
+        XCTAssertTrue(engine.isLost)
+
+        engine.pause()
+        engine.resume()
+
+        XCTAssertFalse(engine.isLost)
+    }
 }
