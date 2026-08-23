@@ -1,5 +1,37 @@
 # Todo
 
+## 2026-08-19 — Crash/hang after finishing a speech (branch `fix/recovery-index-space`)
+
+Reported: app crashes or stops responding after finishing a full speech, clicking pause, and
+sitting in the background. Intermittent, hard to reproduce.
+
+- [x] **Root cause (crash): recovery index built in the wrong index space.** `LandmarkIndex` came
+      from `TextNormalizer.normalizeText(text)` (fillers dropped, numbers expanded) while
+      `cursorPosition` walks `displayWords`. `attemptRecovery` built
+      `cursorPosition..<index.wordCount` from both, which **traps** once the cursor passes the
+      shorter count — i.e. at the end of a script, ~15s after the speaker stops, when the tick
+      timer fires recovery. Reproduced deterministically, then fixed by indexing `matchWords`.
+- [x] **Recovery ran while paused** — the 1s tick calls `attemptRecovery()` whenever `isLost` is
+      set, with no pause guard, so it re-scanned the script every second and could jump the
+      cursor under a stopped speaker. Added the guard; `resume()` now clears `isLost`.
+- [x] **60fps interpolation timer never stopped** — scheduled in `updateNSView`, invalidated only
+      in `deinit`. Now stopped while paused and in `dismantleNSView`.
+- [x] **Provider teardown race** — `stopListening()` resolved `activeProvider` inside a detached
+      Task, so stop-then-start (switchProvider) killed the new provider. Captured synchronously.
+- [x] 15 new tests (113 total, was 98); lint and release build clean.
+
+### Still open — needs a product decision
+
+**The mic stays hot while paused.** `togglePause()` calls `engine.pause()` but never
+`speechCoordinator.stopListening()`, so the audio engine keeps running and
+`AppleSpeechProvider`'s watchdog keeps rotating recognition sessions every few seconds for as
+long as the app sits paused in the background. The engine discards the words, so this is a
+power/privacy cost, not a correctness bug.
+
+Stopping the mic on pause is a one-line change in `togglePause()` (now safe, given the provider
+teardown fix), but it trades instant resume for a ~200-500ms recognizer restart and would need a
+real-mic test. Left for the user to choose.
+
 ## 2026-08-17 — Linting, README, doc reconciliation (branch `chore/lint-and-docs`)
 
 Follow-on from `/init`, which refreshed `CLAUDE.md`.

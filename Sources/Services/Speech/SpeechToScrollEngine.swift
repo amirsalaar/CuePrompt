@@ -30,6 +30,10 @@ final class SpeechToScrollEngine {
     /// Whether tracking has been lost (no match for > timeout).
     private(set) var isLost: Bool = false
 
+    /// Word count of the recovery index. Invariant: equals `totalWords`, because recovery
+    /// writes its result directly into `cursorPosition` (display-word space).
+    var recoveryIndexWordCount: Int { landmarkIndex?.wordCount ?? 0 }
+
     // MARK: - Configuration
 
     /// How many words ahead to search for a match (normal speech).
@@ -85,7 +89,10 @@ final class SpeechToScrollEngine {
         // Normalized for speech matching — 1:1 with displayWords
         matchWords = displayWords.map { TextNormalizer.normalize($0) }
 
-        landmarkIndex = LandmarkIndex(scriptText: text)
+        // Index the SAME word array the cursor walks. Building from raw `text` would use
+        // TextNormalizer.normalizeText's filler-stripped, number-expanded index space, so
+        // recovery positions would land on the wrong word — or invert the search range.
+        landmarkIndex = LandmarkIndex(normalizedWords: matchWords)
         self.slideBoundaries = slideBoundaries.sorted()
         totalWords = displayWords.count
         cursorPosition = 0
@@ -138,11 +145,17 @@ final class SpeechToScrollEngine {
 
     /// Attempt recovery when tracking is lost. Called with recent speech buffer.
     func attemptRecovery(recentWords: [String]) {
+        // The 1s tick timer calls this whenever `isLost` is set — including while paused,
+        // where jumping the cursor would move the script under a stopped speaker.
+        guard isTracking, !isPaused else { return }
         guard isLost, let index = landmarkIndex else { return }
         guard !recentWords.isEmpty else { return }
 
-        // Search from current position forward through the entire script
-        let searchRange = cursorPosition..<index.wordCount
+        // Search from current position forward through the entire script. Clamped because
+        // an inverted Range traps at runtime: after a full speech `cursorPosition` sits at
+        // the very end, so any index/cursor desync crashes here rather than mis-scrolling.
+        let upperBound = min(index.wordCount, totalWords)
+        let searchRange = min(cursorPosition, upperBound)..<upperBound
         let matches = index.findLandmarks(spokenWords: recentWords, searchRange: searchRange)
 
         if let best = matches.first(where: { $0.isStrong(threshold: 0.80) }) {
@@ -157,7 +170,7 @@ final class SpeechToScrollEngine {
         } else {
             // Also try searching from the beginning if we haven't moved yet
             if cursorPosition > 0 {
-                let fullRange = 0..<index.wordCount
+                let fullRange = 0..<upperBound
                 let fullMatches = index.findLandmarks(spokenWords: recentWords, searchRange: fullRange)
                 if let best = fullMatches.first(where: { $0.isStrong(threshold: 0.80) }) {
                     let newPos = best.scriptWordIndex + best.length
@@ -182,6 +195,9 @@ final class SpeechToScrollEngine {
     func resume() {
         isPaused = false
         lastMatchTime = Date()
+        // Silence accumulated while paused isn't lost tracking — otherwise the first tick
+        // after resume fires a recovery search against a stale buffer.
+        isLost = false
     }
 
     /// Manually nudge the scroll position (arrow keys while paused).

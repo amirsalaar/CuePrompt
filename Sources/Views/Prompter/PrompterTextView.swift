@@ -11,6 +11,7 @@ struct PrompterTextView: NSViewRepresentable {
     let totalWords: Int
     let settings: AppSettings
     let viewportHeight: CGFloat
+    let isPaused: Bool
 
     typealias Coordinator = PrompterTextCoordinator
 
@@ -71,11 +72,25 @@ struct PrompterTextView: NSViewRepresentable {
         // Update target position — the display link interpolates smoothly toward it
         coordinator.targetScrollPosition = scrollPosition
         coordinator.targetTotalWords = totalWords
-        coordinator.startDisplayLink()
+
+        // Nothing interpolates while paused: the target is frozen and any viewport pan the
+        // user made should stay put. Leaving the 60fps timer scheduled burns the main
+        // thread on layout queries for as long as the app sits there, paused or hidden.
+        if isPaused {
+            coordinator.stopDisplayLink()
+        } else {
+            coordinator.startDisplayLink()
+        }
     }
 
     func makeCoordinator() -> PrompterTextCoordinator {
         PrompterTextCoordinator()
+    }
+
+    /// Tear the timer down when the view leaves the hierarchy instead of relying on the
+    /// coordinator's `deinit`, which only runs once SwiftUI releases it.
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: PrompterTextCoordinator) {
+        coordinator.stopDisplayLink()
     }
 
     // MARK: - Content Building

@@ -38,7 +38,8 @@ struct PrompterOverlayView: View {
                         scrollPosition: scrollPosition,
                         totalWords: totalWords,
                         settings: settings,
-                        viewportHeight: geo.size.height
+                        viewportHeight: geo.size.height,
+                        isPaused: isPaused
                     )
                     .mask(
                         VStack(spacing: 0) {

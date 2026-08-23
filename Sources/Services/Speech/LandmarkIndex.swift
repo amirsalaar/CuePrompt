@@ -50,8 +50,22 @@ final class LandmarkIndex: Sendable {
         "will be", "would be", "could be", "should be",
     ]
 
-    init(scriptText: String) {
-        let words = TextNormalizer.normalizeText(scriptText)
+    /// Build an index from a raw script string.
+    ///
+    /// `TextNormalizer.normalizeText` drops filler words and expands numbers, so the
+    /// resulting positions are in *its own* index space — they do NOT line up with a
+    /// whitespace split of the same text. Callers that map positions back onto script
+    /// words must use `init(normalizedWords:)` instead.
+    convenience init(scriptText: String) {
+        self.init(normalizedWords: TextNormalizer.normalizeText(scriptText))
+    }
+
+    /// Build an index over an already-tokenized word array, preserving its index space.
+    ///
+    /// Pass words that are 1:1 with the caller's own word list (e.g. the engine's
+    /// `matchWords`) so that a returned `scriptWordIndex` is directly usable as a
+    /// cursor position. Empty entries are kept so indices stay aligned.
+    init(normalizedWords words: [String]) {
         self.normalizedWords = words
         self.wordCount = words.count
 
