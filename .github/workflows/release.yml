@@ -143,6 +143,14 @@ jobs:
 
           plutil -lint "$APP_BUNDLE/Contents/Info.plist"
 
+      # Info.plist declares CFBundleIconFile=AppIcon, so the .icns must exist or the
+      # published app falls back to the generic icon. Must run before signing, or the
+      # icon lands outside the signature.
+      - name: Generate app icon
+        run: |
+          scripts/make-icon.sh "$APP_BUNDLE/Contents/Resources"
+          test -f "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+
       - name: Code sign
         run: |
           ENTITLEMENTS="Entitlements/CuePrompt.entitlements"
