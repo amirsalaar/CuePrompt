@@ -1,5 +1,23 @@
 # Lessons
 
+## Never swap an AVAudioEngine tap while the engine is running
+
+`removeTap(onBus:)` + `installTap(onBus:)` on a running engine is a use-after-free: AVFAudio
+frees the old block on its RealtimeMessenger queue while CoreAudio's render thread can still be
+dispatching through it. It surfaces as `EXC_BAD_ACCESS` / `SIGSEGV` with `pc: 0x0` and
+`(Instruction Abort) Translation fault` on thread `com.apple.audio.IOThread.client` — a jump to a
+null function pointer, with no frames of ours on the crashing thread. Install the tap once before
+`start()`, and put a thread-safe indirection behind it for anything that needs to change.
+
+Reading a crash like this: the faulting thread only says "the tap vanished". The cause is in the
+*other* threads — one installing a tap, one running `_Block_release` on the old tap block.
+
+## Verify a concurrency fix with `swift test --sanitize=thread`
+
+A lock-vs-no-lock difference usually won't fail a normal test run; the race just doesn't happen.
+TSan makes it deterministic. Worth confirming teeth by temporarily removing the lock and checking
+that TSan *does* report the race, then restoring — otherwise the test proves nothing.
+
 ## Ranges built from two tokenizations trap at runtime
 
 `cursorPosition..<index.wordCount` is a crash, not a mismatch, when the bounds come from

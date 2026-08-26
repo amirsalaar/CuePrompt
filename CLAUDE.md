@@ -52,6 +52,7 @@ CuePrompt is a macOS-native smart teleprompter. It uses WhisperKit voice recogni
 
 - **SpeechProvider** protocol has NO ObservableObject conformance — views observe `SpeechCoordinator` instead
 - **Audio buffer** access is actor-isolated (data race prevention)
+- **Install the input tap exactly once** — in `AppleSpeechProvider.startListening()`, before `engine.start()`, and remove it only after `engine.stop()`. Swapping a tap on a running engine races CoreAudio's render thread against AVFAudio freeing the old block (`EXC_BAD_ACCESS`, `pc=0x0` on `com.apple.audio.IOThread.client`). Session rotation retargets `SpeechAudioSink` instead of touching the tap.
 - **WhisperKit** must be initialized with offline env vars:
   ```swift
   setenv("HF_HUB_OFFLINE", "1", 1)

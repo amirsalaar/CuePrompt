@@ -1,5 +1,36 @@
 # Todo
 
+## 2026-08-26 — SIGSEGV on the audio render thread (branch `fix/audio-tap-race`)
+
+Crash report from v0.1.5: `EXC_BAD_ACCESS (SIGSEGV)`, `pc: 0x0`, faulting thread
+`com.apple.audio.IOThread.client`. Process had been in `Background` role for 4h14m.
+
+- [x] **Root cause: the input tap was re-installed on a running engine every session
+      rotation.** `startRecognitionTask()` did `removeTap` + `installTap` with a block that
+      captured that session's request, while the engine stayed started across rotations
+      (≤55s session limit, or 8s silence watchdog). The crash report caught all three sides:
+      thread 10 installing the new tap, thread 7 in `_Block_release` freeing the old block
+      and its buffered `AVAudioBuffer`s, thread 6 (render) jumping to a null pointer.
+- [x] Tap is now installed **once**, in `startListening()` before `engine.start()`; rotation
+      retargets the new `SpeechAudioSink` instead. Removal happens only after `engine.stop()`.
+- [x] Fixed a second bug in the same code: the old tap kept calling `append()` on a request
+      that `stopRecognitionTask()` had already sent `endAudio()` to, for the 300ms gap.
+- [x] 6 sink tests (119 total). Verified clean under `swift test --sanitize=thread`, and
+      confirmed the race test has teeth by checking TSan reports a race with the lock removed.
+
+### Not covered by tests
+
+`AppleSpeechProvider` needs a microphone and a running `AVAudioEngine`, so the tap lifecycle
+itself can't be unit tested — only the sink can. Needs a manual run: present, let it sit long
+enough for several rotations (>1 min, plus silence to trip the 8s watchdog), confirm tracking
+still works and it doesn't crash.
+
+### Related, still open
+
+The mic keeps running while paused (`togglePause` never calls `stopListening`), which is why
+this app was rotating sessions for four hours in the background with nobody speaking. Fixing the
+tap removes the crash; stopping the mic on pause would remove the exposure.
+
 ## 2026-08-19 — Crash/hang after finishing a speech (branch `fix/recovery-index-space`)
 
 Reported: app crashes or stops responding after finishing a full speech, clicking pause, and

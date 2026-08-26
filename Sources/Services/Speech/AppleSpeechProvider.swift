@@ -15,6 +15,8 @@ actor AppleSpeechProvider: SpeechProvider {
     private var recognitionTask: SFSpeechRecognitionTask?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var continuation: AsyncStream<[RecognizedWord]>.Continuation?
+    /// Indirection between the permanently-installed tap and the current request.
+    private let audioSink = SpeechAudioSink()
     private var _isListening = false
     private var sessionStartTime: Date?
     // nonisolated(unsafe) because the recognition callback runs on SFSpeechRecognizer's
@@ -73,6 +75,18 @@ actor AppleSpeechProvider: SpeechProvider {
         self.audioEngine = engine
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+        // Install the tap ONCE, before the engine starts, and never touch it again until
+        // teardown. Re-installing it per rotation raced the real-time render thread against
+        // AVFAudio freeing the old block (EXC_BAD_ACCESS, pc=0x0 on the audio IOThread).
+        // Rotation swaps audioSink's request instead.
+        audioSink.setRequest(nil)
+        inputNode.removeTap(onBus: 0)
+        let sink = audioSink
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+            sink.append(buffer)
+        }
+
         engine.prepare()
         try engine.start()
         debugLog("[AppleSpeech] Audio engine started, format: \(recordingFormat)")
@@ -96,7 +110,8 @@ actor AppleSpeechProvider: SpeechProvider {
 
     /// Start a new recognition task on the existing audio engine.
     private func startRecognitionTask() {
-        guard let audioEngine, let recognizer else { return }
+        // The tap is owned by startListening(); this only needs the engine to still exist.
+        guard audioEngine != nil, let recognizer else { return }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -113,13 +128,9 @@ actor AppleSpeechProvider: SpeechProvider {
         self.lastWordTime = Date()
         self.lastProcessedSegmentCount = 0
 
-        // Install a fresh tap to feed buffers to this request
-        let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            request.append(buffer)
-        }
+        // Point the already-installed tap at the new request. Never re-install the tap here:
+        // the engine is running and the render thread may be inside the current block.
+        audioSink.setRequest(request)
 
         startWatchdog()
 
@@ -273,6 +284,9 @@ actor AppleSpeechProvider: SpeechProvider {
 
     /// Stop only the recognition task/request — leave audio engine running.
     private func stopRecognitionTask() {
+        // Detach first: appending to a request after endAudio() is invalid, and the tap keeps
+        // capturing buffers through the rotation gap.
+        audioSink.setRequest(nil)
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest?.endAudio()
